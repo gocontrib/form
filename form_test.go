@@ -76,4 +76,13 @@ var _ = Describe("Form", func() {
 		var err = loginDecoder.Decode(form, input)
 		validLogin(form, err)
 	})
+
+	It("error when required field is not set", func() {
+		var input = map[string]interface{}{
+			"user": "bob",
+		}
+		var form = &LoginForm{}
+		var err = loginDecoder.Decode(form, input)
+		Expect(err).NotTo(BeNil())
+	})
 })

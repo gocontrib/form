@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -11,11 +12,17 @@ import (
 	"strings"
 )
 
+type field struct {
+	name     string
+	setter   setter
+	required bool
+	defval   interface{}
+}
+
 // Decoder of form structs
 type Decoder struct {
-	typ      reflect.Type
-	fields   map[string]setter
-	required map[string]bool
+	typ    reflect.Type
+	fields map[string]field
 }
 
 type setter func(reflect.Value, interface{}) error
@@ -102,9 +109,9 @@ func (d *Decoder) decodeMap(form interface{}, data map[string]interface{}) error
 	value := reflect.ValueOf(form).Elem()
 
 	required := make(map[string]bool)
-	for k, v := range d.required {
-		if v {
-			required[k] = v
+	for k, f := range d.fields {
+		if f.required {
+			required[k] = true
 		}
 	}
 
@@ -113,42 +120,59 @@ func (d *Decoder) decodeMap(form interface{}, data map[string]interface{}) error
 	for k, v := range data {
 		var key = strings.ToLower(k)
 
-		setter, ok := d.fields[key]
+		f, ok := d.fields[key]
 		if !ok {
 			continue
 		}
 
-		err := setter(value, v)
+		err := f.setter(value, v)
 		if err != nil {
 			errs[key] = err
 		}
 
-		if _, ok = required[key]; ok {
+		if _, ok = required[key]; ok && !isNullOrEmpty(v) {
 			delete(required, key)
 		}
 	}
 
+	// TODO set default values
+
 	if len(errs) > 0 {
 		return errs
+	}
+
+	if len(required) > 0 {
+		var names = []string{}
+		for k := range required {
+			names = append(names, k)
+		}
+		return fmt.Errorf("Please fill required fields: %s", strings.Join(names, ", "))
 	}
 
 	return nil
 }
 
 func (d *Decoder) reflectFields(t reflect.Type) {
-	d.fields = make(map[string]setter)
-	d.required = make(map[string]bool)
+	d.fields = make(map[string]field)
 	for i := 0; i < t.NumField(); i++ {
 		var f = t.Field(i)
-		// TODO support custom name
-		var key = strings.ToLower(f.Name)
+		var name = strings.ToLower(f.Name)
 
-		d.fields[key] = fieldSetter(f)
+		var json = f.Tag.Get("json")
+		if len(json) > 0 {
+			var spec = strings.Split(json, ",")
+			name = strings.ToLower(spec[0])
+		}
 
-		if req, err := strconv.ParseBool(f.Tag.Get("required")); err != nil {
-			d.required[key] = req
-		} else {
-			d.required[key] = false
+		var required = false
+		if req, err := strconv.ParseBool(f.Tag.Get("required")); err == nil {
+			required = req
+		}
+
+		d.fields[name] = field{
+			name:     name,
+			setter:   fieldSetter(f),
+			required: required,
 		}
 	}
 }
@@ -185,4 +209,14 @@ func typeOf(v interface{}) reflect.Type {
 	}
 
 	return t
+}
+
+func isNullOrEmpty(v interface{}) bool {
+	switch v.(type) {
+	case string:
+		s := v.(string)
+		return len(strings.TrimSpace(s)) == 0
+	default:
+		return v == nil
+	}
 }
