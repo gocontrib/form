@@ -12,6 +12,21 @@ import (
 	"strings"
 )
 
+// Decode form struct from given input.
+func Decode(form interface{}, input interface{}) error {
+	var t = typeOf(form)
+	var d, ok = decoders[t]
+	if !ok {
+		d = &decoder{typ: t}
+		d.init()
+		decoders[t] = d
+	}
+	return d.Decode(form, input)
+}
+
+// Cache of decoders
+var decoders = make(map[reflect.Type]*decoder)
+
 type field struct {
 	name     string
 	setter   setter
@@ -20,7 +35,7 @@ type field struct {
 }
 
 // Decoder of form structs
-type Decoder struct {
+type decoder struct {
 	typ    reflect.Type
 	fields map[string]field
 }
@@ -28,17 +43,14 @@ type Decoder struct {
 type setter func(reflect.Value, interface{}) error
 
 // NewDecoder creates decoder for given form
-func NewDecoder(v interface{}) *Decoder {
-	if v == nil {
-		panic("null argument")
-	}
-	var d = &Decoder{typ: typeOf(v)}
-	d.reflectFields(d.typ)
+func newDecoder(v interface{}) *decoder {
+	var d = &decoder{typ: typeOf(v)}
+	d.init()
 	return d
 }
 
 // Decode form struct from given input
-func (d *Decoder) Decode(form interface{}, input interface{}) error {
+func (d *decoder) Decode(form interface{}, input interface{}) error {
 	switch input.(type) {
 	case *http.Request:
 		return d.decodeRequest(form, input.(*http.Request))
@@ -60,7 +72,7 @@ func (d *Decoder) Decode(form interface{}, input interface{}) error {
 	}
 }
 
-func (d *Decoder) decodeRequest(form interface{}, r *http.Request) error {
+func (d *decoder) decodeRequest(form interface{}, r *http.Request) error {
 	if r.Method == "GET" {
 		return d.decodeForm(form, r.URL.Query())
 	}
@@ -97,7 +109,7 @@ func (d *Decoder) decodeRequest(form interface{}, r *http.Request) error {
 	return d.decodeForm(form, r.Form)
 }
 
-func (d *Decoder) decodeForm(form interface{}, data url.Values) error {
+func (d *decoder) decodeForm(form interface{}, data url.Values) error {
 	var f = make(map[string]interface{})
 	for key := range data {
 		f[key] = data.Get(key)
@@ -105,7 +117,7 @@ func (d *Decoder) decodeForm(form interface{}, data url.Values) error {
 	return d.decodeMap(form, f)
 }
 
-func (d *Decoder) decodeMap(form interface{}, data map[string]interface{}) error {
+func (d *decoder) decodeMap(form interface{}, data map[string]interface{}) error {
 	value := reflect.ValueOf(form).Elem()
 
 	required := make(map[string]bool)
@@ -152,7 +164,8 @@ func (d *Decoder) decodeMap(form interface{}, data map[string]interface{}) error
 	return nil
 }
 
-func (d *Decoder) reflectFields(t reflect.Type) {
+func (d *decoder) init() {
+	var t = d.typ
 	d.fields = make(map[string]field)
 	for i := 0; i < t.NumField(); i++ {
 		var f = t.Field(i)

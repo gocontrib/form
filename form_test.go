@@ -14,8 +14,6 @@ type LoginForm struct {
 	Password string `required:"true"`
 }
 
-var loginDecoder = NewDecoder(LoginForm{})
-
 func TestForm(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Form")
@@ -37,14 +35,14 @@ var _ = Describe("Form", func() {
 			"password": "b0b",
 		}
 		var form = &LoginForm{}
-		var err = loginDecoder.Decode(form, input)
+		var err = Decode(form, input)
 		validLogin(form, err)
 	})
 
 	It("should be decoded from GET request", func() {
 		var input, _ = http.NewRequest("GET", "/?user=bob&password=b0b", nil)
 		var form = &LoginForm{}
-		var err = loginDecoder.Decode(form, input)
+		var err = Decode(form, input)
 		validLogin(form, err)
 	})
 
@@ -53,7 +51,7 @@ var _ = Describe("Form", func() {
 		var input, _ = http.NewRequest("POST", "/", body)
 		input.Header.Set("Content-Type", "application/json")
 		var form = &LoginForm{}
-		var err = loginDecoder.Decode(form, input)
+		var err = Decode(form, input)
 		validLogin(form, err)
 	})
 
@@ -62,7 +60,7 @@ var _ = Describe("Form", func() {
 		var input, _ = http.NewRequest("POST", "/", body)
 		input.Header.Set("Content-Type", "application/xml")
 		var form = &LoginForm{}
-		var err = loginDecoder.Decode(form, input)
+		var err = Decode(form, input)
 		validLogin(form, err)
 	})
 
@@ -73,7 +71,7 @@ var _ = Describe("Form", func() {
 		})
 
 		var form = &LoginForm{}
-		var err = loginDecoder.Decode(form, input)
+		var err = Decode(form, input)
 		validLogin(form, err)
 	})
 
@@ -82,7 +80,7 @@ var _ = Describe("Form", func() {
 			"user": "bob",
 		}
 		var form = &LoginForm{}
-		var err = loginDecoder.Decode(form, input)
+		var err = Decode(form, input)
 		Expect(err).NotTo(BeNil())
 	})
 })
